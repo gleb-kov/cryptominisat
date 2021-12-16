@@ -117,8 +117,8 @@ private:
 
     /* Data structures for vars: arrays of size numvars indexed by var */
 
-    lbool *assigns = NULL;         /* value of each var */
-    lbool *best_assigns = NULL;
+    vector<lbool> assigns;         /* value of each var */
+    vector<lbool> best_assigns;
     uint32_t *breakcount = NULL;   /* number of clauses that become unsat if var if flipped */
     uint32_t *makecount = NULL;    /* number of clauses that become sat if var if flipped */
 
@@ -143,9 +143,10 @@ private:
     uint32_t numerator; /* make random flip with numerator/denominator frequency */
     double walk_probability = 0.5;
     uint64_t numflip;        /* number of changes so far */
-    static constexpr uint64_t cutoff = 100000;
+    static constexpr uint64_t cutoff = 100;
     static constexpr uint32_t denominator = 100000; /* denominator used in fractions to represent probabilities */
     static constexpr uint32_t one_percent = 1000;   /* ONE_PERCENT / denominator = 0.01 */
+    static constexpr size_t mergingBlockSize = 8;
     uint32_t numtry = 0;   /* total attempts at solutions */
 
     /* Histogram of tail */

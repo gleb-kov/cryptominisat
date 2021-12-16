@@ -21,14 +21,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ***********************************************/
 
-#include "time_mem.h"
-#include <limits>
-#include <cstdio>
-#include <cmath>
-#include <cstdlib>
-#include "constants.h"
 #include "walksat.h"
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <limits>
+#include <random>
+#include "constants.h"
 #include "solver.h"
+#include "time_mem.h"
 //#define SLOW_DEBUG
 
 using namespace CMSat;
@@ -56,8 +57,6 @@ WalkSAT::~WalkSAT()
     free(occur_list_alloc);
     free(occurrence);
     free(numoccurrence);
-    free(assigns);
-    free(best_assigns);
     free(breakcount);
     free(makecount);
     free(changed);
@@ -90,39 +89,71 @@ lbool WalkSAT::main()
     initialize_statistics();
     print_statistics_header();
 
-    uint32_t last_low_bad = 1000;
     lowestbad = std::numeric_limits<uint32_t>::max();
-    while (!found_solution && numtry < solver->conf.walksat_max_runs) {
-        numtry++;
-        init_for_round();
-        update_statistics_start_try();
-        numflip = 0;
 
-        while (!found_solution && (numfalse > 0) && (numflip < cutoff)) {
-            numflip++;
-
-            uint32_t var = pickrnovelty();
-            flipvar(var);
-            update_statistics_end_flip();
-        }
-        #ifdef SLOW_DEBUG
-        check_make_break();
-        #endif
-        update_and_print_statistics_end_try();
-
-        //Trying to early exit in case it's not really working
-        int diff = (int)last_low_bad-(int)lowbad;
-        if ((numtry > 3 && lowbad > 1000)
-            || (numtry > 3 && lowbad > 300 && diff < 20 )
-            || (numtry > 10 && lowbad > 50)
-        ) {
-            if (solver->conf.verbosity) {
-                cout << "c [walksat] abandoning, lowbad is too high" << endl;
-            }
-            break;
-        }
-        last_low_bad = lowbad;
+    const size_t mergeVarsCnt = (numvars + mergingBlockSize - 1) / mergingBlockSize;
+    vector<size_t> vars_permutation(numvars);
+    for (size_t i = 0; i < numvars; ++i) {
+        vars_permutation[i] = i;
     }
+    std::shuffle(vars_permutation.begin(), vars_permutation.end(), std::mt19937(mtrand.randInt()));
+
+    while (!found_solution && numtry < solver->conf.walksat_max_runs) {
+        for (size_t mergeVarIdx = 0; mergeVarIdx < mergeVarsCnt; ++mergeVarIdx) {
+            uint64_t init_merge_var_mask = 0;
+            size_t mergeVarSubIdx = 0;
+
+            for (; mergeVarSubIdx < mergingBlockSize; ++mergeVarSubIdx) {
+                size_t atomIdx = mergeVarIdx * mergingBlockSize + mergeVarSubIdx;
+                size_t varIdx = vars_permutation[atomIdx];
+                init_merge_var_mask <<= 1u;
+                if (assigns[varIdx] == l_True) {
+                    init_merge_var_mask |= 1u;
+                }
+            }
+
+            for (uint64_t mergeVarMask = init_merge_var_mask; mergeVarMask < (1u << mergeVarSubIdx); ++mergeVarMask) {
+                cout << mergeVarIdx << ' ' << mergeVarSubIdx << ' ' << mergeVarMask << endl;
+                uint64_t tmpMergeVarMask = mergeVarMask;
+
+                for (size_t varSubIdx = mergeVarSubIdx; varSubIdx >= 1; --varSubIdx) {
+                    size_t atomIdx = mergeVarIdx * mergingBlockSize + varSubIdx;
+                    size_t varIdx = vars_permutation[atomIdx];
+                    assigns[varIdx] = l_False;
+                    if (tmpMergeVarMask & 1u) {
+                        assigns[varIdx] = l_True;
+                    }
+                    tmpMergeVarMask >>= 1u;
+                }
+
+                numtry++;
+                cout << numtry << endl;
+                init_for_round();
+                update_statistics_start_try();
+                numflip = 0;
+
+                while (!found_solution && (numfalse > 0) && (numflip < cutoff)) {
+                    numflip++;
+                    uint32_t var = pickrnovelty();
+                    flipvar(var);
+                    update_statistics_end_flip();
+                }
+
+                update_and_print_statistics_end_try();
+            }
+
+            if (numtry >= solver->conf.walksat_max_runs) {
+                break;
+            }
+
+            for (uint32_t i = 0; i < numvars; i++) {
+                //all assumed and already set variables have been removed
+                //from the problem already, so the stuff below is safe.
+                assigns[i] = mtrand.randInt(1) ? l_True : l_False;
+            }
+        }
+    }
+
     print_statistics_final();
     return l_Undef;
 }
@@ -298,9 +329,6 @@ void WalkSAT::init_for_round()
     for (uint32_t i = 0; i < numvars; i++) {
         breakcount[i] = 0;
         makecount[i] = 0;
-        //all assumed and already set variables have been removed
-        //from the problem already, so the stuff below is safe.
-        assigns[i] = mtrand.randInt(1) ? l_True: l_False;
     }
 
     /* initialize truth assignment and changed time */
@@ -414,8 +442,8 @@ bool WalkSAT::init_problem()
 
     occurrence = (uint32_t **)calloc(sizeof(uint32_t *), (2 * numvars));
     numoccurrence = (uint32_t *)calloc(sizeof(uint32_t), (2 * numvars));
-    assigns = (lbool *)calloc(sizeof(lbool), numvars);
-    best_assigns = (lbool *)calloc(sizeof(lbool), numvars);
+    assigns.assign(numvars, l_True);
+    best_assigns.assign(numvars, l_True);
     breakcount = (uint32_t *)calloc(sizeof(uint32_t), numvars);
     changed = (int64_t *)calloc(sizeof(int64_t), numvars);
     makecount = (uint32_t *)calloc(sizeof(uint32_t), numvars);
@@ -515,6 +543,7 @@ void WalkSAT::print_parameters()
         cout << "c [walksat] tries = " << solver->conf.walksat_max_runs << endl;
         cout << "c [walksat] walk probabability = "
         << std::fixed << std::setprecision(2) << walk_probability << endl;
+        cout << "c [walksat] merge block size = " << mergingBlockSize << endl;
     }
 }
 

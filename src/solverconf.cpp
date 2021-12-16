@@ -329,7 +329,7 @@ DLL_PUBLIC SolverConf::SolverConf() :
         , sls_every_n(2)
         , yalsat_max_mems(40)
         , sls_memoutMB(500)
-        , walksat_max_runs(50)
+        , walksat_max_runs(50) // TODO(gleb-kov)
         , sls_get_phase(1)
         , sls_ccnr_asipire(1)
         , which_sls("ccnr")
