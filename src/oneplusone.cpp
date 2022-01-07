@@ -22,14 +22,18 @@ lbool OnePlusOneSAT::main()
         return l_Undef;
     }
 
+    mtrand.seed(solver->mtrand.randInt());
+
     for (size_t i = 0; i < cutoff; ++i) {
         uint32_t toFlip = countVarsToFlip();
         flipvar(toFlip);
 
-        if (numfalse < lowestbad) {
+        if (numfalse <= lowestbad) {
             lowestbad = numfalse;
             best_assigns = assigns;
-            if (numfalse == 0) break;
+            if (numfalse == 0) {
+                break;
+            }
         }
     }
 
@@ -70,8 +74,7 @@ bool OnePlusOneSAT::init_problem()
 
 uint32_t OnePlusOneSAT::countVarsToFlip()
 {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
+    static std::mt19937 gen(mtrand.randInt());
     static std::uniform_real_distribution<long double> uniDist(0.0l, normalization);
 
     size_t toFlip = 0;
@@ -85,6 +88,15 @@ uint32_t OnePlusOneSAT::countVarsToFlip()
 
 void OnePlusOneSAT::flipvar(uint32_t toflip)
 {
-    // flips some, updates assigns, calculates numfalse
+    // mutation rate = toFlip / solver->nVars()
+
+    for (size_t i = 0; i < solver->nVars(); ++i) {
+        if (mtrand.randInt(solver->nVars() - 1) < toflip) { // verified
+            assigns[i] = assigns[i] ^ true;
+        }
+    }
+
+    // TODO: recalc numfalse
+
     throw std::runtime_error("oneplusone: not implemented");
 }

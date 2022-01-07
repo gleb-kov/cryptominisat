@@ -1,9 +1,12 @@
 #ifndef CRYPTOMINISAT5_ONEPLUSONE_H
 #define CRYPTOMINISAT5_ONEPLUSONE_H
+
 #include <cstdint>
 #include <cstdio>
-#include "solvertypes.h"
+#include <vector>
+#include <limits>
 #include "MersenneTwister.h"
+#include "cryptominisat5/solvertypesmini.h"
 
 namespace CMSat {
 
@@ -23,9 +26,11 @@ class OnePlusOneSAT
     Solver* solver = nullptr;
     static constexpr uint64_t cutoff = 100;
     uint32_t lowestbad = std::numeric_limits<uint32_t>::max();
-    vector<lbool> assigns;         /* value of each var */
-    vector<lbool> best_assigns;
+    std::vector<lbool> assigns;         /* value of each var */
+    std::vector<lbool> best_assigns;
     uint32_t numfalse = 0;   /* number of false clauses */
+
+    MTRand mtrand;
 
    private:
     uint32_t countVarsToFlip();
