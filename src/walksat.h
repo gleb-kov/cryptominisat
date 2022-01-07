@@ -39,6 +39,9 @@ public:
     ~WalkSAT();
 
 private:
+    void main_iteration(bool onlyCores);
+
+private:
     Solver* solver;
 
     /************************************/
@@ -87,7 +90,7 @@ private:
     /****************************************************************/
     /*                  Heuristics                                  */
     /****************************************************************/
-    uint32_t pickrnovelty();
+    uint32_t pickrnovelty(bool onlyCores);
 
     /************************************/
     /* Main data structures             */
@@ -103,6 +106,8 @@ private:
     uint32_t numclauses;   /* number of clauses */
     uint32_t numliterals; /* number of instances of literals across all clauses */
     uint32_t numfalse;   /* number of false clauses */
+    uint32_t numfalseViaCore; /* number of false clauses containing core variables */
+    static constexpr size_t CORE_VARS = 512; // MD5
 
     /* Data structures for clauses */
 

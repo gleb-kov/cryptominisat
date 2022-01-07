@@ -86,17 +86,34 @@ lbool WalkSAT::main()
         }
         return l_Undef;
     }
+
     initialize_statistics();
     print_statistics_header();
 
     lowestbad = std::numeric_limits<uint32_t>::max();
 
-    const size_t mergeVarsCnt = (numvars + mergingBlockSize - 1) / mergingBlockSize;
+    main_iteration(false);
+    for (int i = 0; i < 5; ++i) {
+        if (found_solution) {
+            break;
+        }
+        main_iteration(true);
+    }
+
+    print_statistics_final();
+    return l_Undef;
+}
+
+void WalkSAT::main_iteration(bool onlyCores) {
     vector<size_t> vars_permutation(numvars);
-    for (size_t i = 0; i < numvars; ++i) {
+    const uint64_t maxFlipsPerIteration = (onlyCores ? 50 * cutoff : cutoff);
+    const size_t mergeVarsCnt = (onlyCores ? CORE_VARS : numvars) / mergingBlockSize;
+    for (size_t i = 0; i < mergeVarsCnt * mergingBlockSize; ++i) {
         vars_permutation[i] = i;
     }
-    std::shuffle(vars_permutation.begin(), vars_permutation.end(), std::mt19937(mtrand.randInt()));
+    std::shuffle(vars_permutation.begin(),
+                 vars_permutation.begin() + mergeVarsCnt * mergingBlockSize,
+                 std::mt19937(mtrand.randInt()));
 
     while (!found_solution && numtry < solver->conf.walksat_max_runs) {
         for (size_t mergeVarIdx = 0; mergeVarIdx < mergeVarsCnt; ++mergeVarIdx) {
@@ -132,9 +149,9 @@ lbool WalkSAT::main()
                 update_statistics_start_try();
                 numflip = 0;
 
-                while (!found_solution && (numfalse > 0) && (numflip < cutoff)) {
+                while (!found_solution && (numfalse > 0) && (numflip < maxFlipsPerIteration)) {
                     numflip++;
-                    uint32_t var = pickrnovelty();
+                    uint32_t var = pickrnovelty(onlyCores);
                     flipvar(var);
                     update_statistics_end_flip();
                 }
@@ -153,9 +170,6 @@ lbool WalkSAT::main()
             }
         }
     }
-
-    print_statistics_final();
-    return l_Undef;
 }
 
 void WalkSAT::WalkSAT::flipvar(uint32_t toflip)
@@ -341,7 +355,11 @@ void WalkSAT::init_for_round()
         Lit thetruelit = lit_Undef;
         uint32_t sz = clsize[i];
         assert(sz >= 1);
+        bool hasCoreVars = false;
         for (uint32_t j = 0; j < sz; j++) {
+            if (clause[i][j].var() < CORE_VARS) {
+                hasCoreVars = true;
+            }
             if (value(clause[i][j]) == l_True) {
                 numtruelit[i]++;
                 thetruelit = clause[i][j];
@@ -351,6 +369,9 @@ void WalkSAT::init_for_round()
             map_cl_to_false_cls[i] = numfalse;
             false_cls[numfalse] = i;
             numfalse++;
+            if (hasCoreVars) {
+                numfalseViaCore++;
+            }
             for (uint32_t j = 0; j < clsize[i]; j++) {
                 makecount[clause[i][j].var()]++;
             }
@@ -803,9 +824,9 @@ void WalkSAT::check_num_occurs()
 /*                  Heuristics                                  */
 /****************************************************************/
 
-uint32_t WalkSAT::pickrnovelty()
+uint32_t WalkSAT::pickrnovelty(bool onlyCores)
 {
-    uint32_t tofix = false_cls[RANDMOD(numfalse)];
+    uint32_t tofix = false_cls[RANDMOD(onlyCores && numfalseViaCore > 0 ? numfalseViaCore : numfalse)];
     uint32_t clausesize = clsize[tofix];
     if (clausesize == 1)
         return clause[tofix][0].var();
