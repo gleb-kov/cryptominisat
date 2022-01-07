@@ -14,9 +14,7 @@ OnePlusOneSAT::~OnePlusOneSAT()
     free(storebase);
     free(clause);
     free(clsize);
-
     free(numtruelit);
-
     free(occur_list_alloc);
     free(occurrence);
     free(numoccurrence);
@@ -45,16 +43,15 @@ lbool OnePlusOneSAT::main()
         init_for_round();
         uint32_t flipsCnt = countVarsToFlip();
         pickflips(flipsCnt);
-        cout << "HERE " << flipsCnt << ' ' << numfalse << ' ' << lowestbad << endl;
 
         if (numfalse <= lowestbad) {
             lowestbad = numfalse;
-            best_assigns = assigns;
+            Best_assigns = Assigns;
             if (numfalse == 0) {
                 break;
             }
         } else {
-            assigns = best_assigns;
+            Assigns = Best_assigns;
         }
     }
 
@@ -68,7 +65,7 @@ lbool OnePlusOneSAT::main()
         }
 
         for(size_t i = 0; i < solver->nVars(); i++) {
-            solver->varData[i].polarity = best_assigns[i] == l_True;
+            solver->varData[i].polarity = Best_assigns[i];
         }
     }
 
@@ -77,48 +74,22 @@ lbool OnePlusOneSAT::main()
 
 void OnePlusOneSAT::flipvar(uint32_t toflip)
 {
-    Lit toenforce;
-    uint32_t numocc;
-
-    if (assigns[toflip] == l_True)
-        toenforce = Lit(toflip, true);
-    else
-        toenforce = Lit(toflip, false);
-
-    assert(value(toflip) != l_Undef);
-    assigns[toflip] = assigns[toflip] ^ true;
+    Lit toenforce = Lit(toflip, Assigns[toflip]);
+    Assigns[toflip] = !Assigns[toflip];
 
     //True made into False
-    numocc = numoccurrence[(~toenforce).toInt()];
-    for (uint32_t i = 0; i < numocc; i++) {
+    for (uint32_t i = 0; i < numoccurrence[(~toenforce).toInt()]; i++) {
         uint32_t cli = occurrence[(~toenforce).toInt()][i];
 
         assert(numtruelit[cli] > 0);
         numtruelit[cli]--;
         if (numtruelit[cli] == 0) {
             numfalse++;
-        } else if (numtruelit[cli] == 1) {
-            /* Find the lit in this clause that makes it true */
-            Lit *litptr = clause[cli];
-            while (true) {
-                /* lit = clause[cli][j]; */
-                Lit lit = *(litptr++);
-                if (value(lit) == l_True) {
-                    /* Swap lit into first position in clause */
-                    if ((--litptr) != clause[cli]) {
-                        Lit temp = clause[cli][0];
-                        clause[cli][0] = *(litptr);
-                        *(litptr) = temp;
-                    }
-                    break;
-                }
-            }
         }
     }
 
     //made into TRUE
-    numocc = numoccurrence[toenforce.toInt()];
-    for (uint32_t i = 0; i < numocc; i++) {
+    for (uint32_t i = 0; i < numoccurrence[toenforce.toInt()]; i++) {
         uint32_t cli = occurrence[toenforce.toInt()][i];
 
         numtruelit[cli]++;
@@ -131,10 +102,10 @@ void OnePlusOneSAT::flipvar(uint32_t toflip)
 
 void OnePlusOneSAT::init_for_round()
 {
+    //all assumed and already set variables have been removed
+    //from the problem already, so the stuff below is safe.
     for (uint32_t i = 0; i < solver->nVars(); i++) {
-        //all assumed and already set variables have been removed
-        //from the problem already, so the stuff below is safe.
-        assigns[i] = mtrand.randInt(1) ? l_True: l_False;
+        Assigns[i] = mtrand.randInt(1) != 0;
     }
 
     numfalse = 0;
@@ -148,7 +119,7 @@ void OnePlusOneSAT::init_for_round()
         uint32_t sz = clsize[i];
         assert(sz >= 1);
         for (uint32_t j = 0; j < sz; j++) {
-            if (value(clause[i][j]) == l_True) {
+            if (value(clause[i][j])) {
                 numtruelit[i]++;
             }
         }
@@ -190,7 +161,7 @@ OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& 
     for(size_t i3 = 0; i3 < cl.size(); i3++) {
         Lit lit = cl[i3];
         assert(solver->varData[lit.var()].removed == Removed::none);
-        lbool val = l_Undef;
+        lbool val;
         if (solver->value(lit) != l_Undef) {
             val = solver->value(lit);
         } else {
@@ -250,15 +221,15 @@ bool OnePlusOneSAT::init_problem()
 
     numclauses = solver->longIrredCls.size() + solver->binTri.irredBins;
 
-    clause = (Lit **)calloc(sizeof(Lit *), numclauses);
-    clsize = (uint32_t *)calloc(sizeof(uint32_t), numclauses);
+    clause = (Lit **)malloc(sizeof(Lit *) * numclauses);
+    clsize = (uint32_t *)malloc(sizeof(uint32_t) * numclauses);
 
     numtruelit = (uint32_t *)malloc(sizeof(uint32_t) * numclauses);
-    occurrence = (uint32_t **)calloc(sizeof(uint32_t *), (2 * solver->nVars()));
-    numoccurrence = (uint32_t *)calloc(sizeof(uint32_t), (2 * solver->nVars()));
+    occurrence = (uint32_t **)malloc(sizeof(uint32_t *) * 2 * solver->nVars());
+    numoccurrence = (uint32_t *)malloc(sizeof(uint32_t) * 2 * solver->nVars());
 
-    assigns.assign(solver->nVars(), l_True);
-    best_assigns.assign(solver->nVars(), l_True);
+    Assigns.assign(solver->nVars(), true);
+    Best_assigns.assign(solver->nVars(), true);
     distribution.resize(solver->nVars() / 2);
 
     numliterals = 0;
@@ -269,7 +240,6 @@ bool OnePlusOneSAT::init_problem()
         numoccurrence[i] = 0;
 
     //where all clauses' literals are
-    vector<Lit> this_clause;
     solver->check_stats();
     uint32_t storesize = solver->litStats.irredLits+solver->binTri.irredBins*2;
     storebase = (Lit *)malloc(storesize*sizeof(Lit));
@@ -279,9 +249,7 @@ bool OnePlusOneSAT::init_problem()
         for(const Watched& w: solver->watches[lit]) {
             if (w.isBin() && !w.red() && lit < w.lit2()) {
                 assert(storeused+2 <= storesize);
-                this_clause.clear();
-                this_clause.push_back(lit);
-                this_clause.push_back(w.lit2());
+                vector<Lit> this_clause = {lit, w.lit2()};
 
                 if (add_this_clause(this_clause, i, storeused) == add_cl_ret::unsat) {
                     return false;
@@ -301,7 +269,7 @@ bool OnePlusOneSAT::init_problem()
     }
     numclauses = i;
 
-    /* allocate occurence lists */
+    /* allocate occurrence lists */
     occur_list_alloc = (uint32_t *)malloc(sizeof(uint32_t) * numliterals);
     i = 0;
     for (uint32_t i2 = 0; i2 < solver->nVars()*2; i2++) {
@@ -315,7 +283,7 @@ bool OnePlusOneSAT::init_problem()
         numoccurrence[lit.toInt()] = 0;
     }
 
-    /* Third, fill in the occurence lists */
+    /* Third, fill in the occurrence lists */
     for (i = 0; i < numclauses; i++) {
         uint32_t sz = clsize[i];
         assert(sz >= 1);

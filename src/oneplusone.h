@@ -29,8 +29,8 @@ class OnePlusOneSAT
     static constexpr uint64_t cutoff = 100;
 
     uint32_t lowestbad = std::numeric_limits<uint32_t>::max();
-    std::vector<lbool> assigns; /* value of each var */
-    std::vector<lbool> best_assigns;
+    std::vector<bool> Assigns; /* value of each var */
+    std::vector<bool> Best_assigns;
     uint32_t numfalse = 0; /* number of false clauses */
     uint32_t numclauses = 0;
     uint32_t numliterals = 0;
@@ -66,11 +66,8 @@ class OnePlusOneSAT
     add_cl_ret add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused);
 
    private:
-    inline lbool value(const uint32_t var) const {
-        return assigns[var];
-    }
-    inline lbool value(const Lit l) const {
-        return assigns[l.var()] ^ l.sign();
+    inline bool value(const Lit l) const {
+        return Assigns[l.var()] ^ l.sign();
     }
 };
 
