@@ -25,6 +25,7 @@ if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
 
 if (NOT WIN32)
     add_cxx_flag_if_supported("-Wno-bitfield-constant-conversion")
@@ -115,6 +116,7 @@ set(cryptoms_lib_files
     ccnr.cpp
     ccnr_cms.cpp
     lucky.cpp
+    oneplusone.cpp
 #    watcharray.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
 )

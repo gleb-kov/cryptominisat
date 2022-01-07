@@ -39,6 +39,8 @@ private:
     Solver* solver;
 
     lbool run_walksat();
+    lbool run_oneplusone();
+
     #ifdef USE_YALSAT
     lbool run_yalsat();
     #endif

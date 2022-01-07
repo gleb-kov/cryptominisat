@@ -73,7 +73,7 @@ public:
         cout << "  --verb          = [0...]  Sets verbosity level. Anything higher\n";
         cout << "                            than 2 will give debug log\n";
         cout << "  --drat          = {fname} DRAT dumped to file\n";
-        cout << "  --sls           = {walksat,yalsat} Which SLS solver to use\n";
+        cout << "  --sls           = {walksat,oneplusone,yalsat} Which SLS solver to use\n";
         cout << "  --threads       = [1...]  Sets number of threads\n";
         cout << "\n";
     }
