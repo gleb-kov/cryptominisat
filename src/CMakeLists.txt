@@ -186,7 +186,7 @@ if (SQLITE3_FOUND)
     SET(cryptoms_lib_link_libs ${cryptoms_lib_link_libs} ${SQLITE3_LIBRARIES})
 endif ()
 
-add_library(cryptominisat5
+add_library(cryptominisat5 STATIC
     ${cryptoms_lib_files}
     cryptominisat.cpp
 )

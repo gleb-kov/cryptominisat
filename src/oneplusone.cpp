@@ -149,7 +149,6 @@ void OnePlusOneSAT::pickflips(uint32_t flipsCnt)
     // chance of getting the same varIdx twice is negligible
     for (uint32_t i = 0; i < flipsCnt; ++i) {
         uint32_t varIdx = mtrand.randInt(solver->nVars() - 1);
-        cout << "flipping " << varIdx << '\n';
         flipvar(varIdx);
     }
 }
