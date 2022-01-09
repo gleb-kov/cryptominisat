@@ -40,19 +40,8 @@ lbool OnePlusOneSAT::main()
     mtrand.seed(solver->mtrand.randInt());
 
     for (size_t i = 0; i < cutoff; ++i) {
-        init_for_round();
-        uint32_t flipsCnt = countVarsToFlip();
-        pickflips(flipsCnt);
-
-        if (numfalse <= lowestbad) {
-            lowestbad = numfalse;
-            Best_assigns = Assigns;
-            if (numfalse == 0) {
-                break;
-            }
-        } else {
-            Assigns = Best_assigns;
-        }
+        large_mutation();
+        small_mutation();
     }
 
     if (numfalse == 0 || solver->conf.sls_get_phase) {
@@ -70,6 +59,36 @@ lbool OnePlusOneSAT::main()
     }
 
     return l_Undef;
+}
+
+void OnePlusOneSAT::large_mutation()
+{
+    //all assumed and already set variables have been removed
+    //from the problem already, so the stuff below is safe.
+    for (uint32_t j = 0; j < solver->nVars(); j++) {
+        Assigns[j] = mtrand.randInt(1) != 0;
+    }
+}
+
+void OnePlusOneSAT::small_mutation()
+{
+    bool updated = false;
+    init_for_round();
+
+    for (uint64_t i = 0; i < lambda; ++i) {
+        uint32_t flipsCnt = countVarsToFlip();
+        pickflips(flipsCnt);
+
+        if (numfalse <= lowestbad) {
+            updated = true;
+            lowestbad = numfalse;
+            Best_assigns = Assigns;
+        }
+    }
+
+    if (!updated) {
+        Assigns = Best_assigns;
+    }
 }
 
 void OnePlusOneSAT::flipvar(uint32_t toflip)
@@ -102,12 +121,6 @@ void OnePlusOneSAT::flipvar(uint32_t toflip)
 
 void OnePlusOneSAT::init_for_round()
 {
-    //all assumed and already set variables have been removed
-    //from the problem already, so the stuff below is safe.
-    for (uint32_t i = 0; i < solver->nVars(); i++) {
-        Assigns[i] = mtrand.randInt(1) != 0;
-    }
-
     numfalse = 0;
 
     /* initialize truth assignment and changed time */

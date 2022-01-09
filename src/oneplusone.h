@@ -20,9 +20,14 @@ class OnePlusOneSAT
     ~OnePlusOneSAT();
 
    private:
+    void large_mutation();
+    void small_mutation();
+
+   private:
     constexpr static long double beta = 3.0l; // 3.0 is proven best
-    long double normalization = 0;         // aka C^beta_{n/2}
-    std::vector<long double> distribution; // aka P_lambda
+    long double normalization = 0;            // aka C^beta_{n/2}
+    std::vector<long double> distribution;    // aka P_lambda
+    constexpr static uint64_t lambda = 1;     // (1+lambda)-EA
 
    private:
     Solver* solver = nullptr;
@@ -36,8 +41,8 @@ class OnePlusOneSAT
     uint32_t numliterals = 0;
 
     uint32_t* numtruelit = nullptr; /* number of true literals in each clause */
-    Lit* storebase = nullptr; //all the literals of all the clauses
-    Lit** clause = nullptr;   /* clauses to be satisfied */
+    Lit* storebase = nullptr;       //all the literals of all the clauses
+    Lit** clause = nullptr;         /* clauses to be satisfied */
     /* indexed as clause[clause_num][literal_num] */
     uint32_t* clsize = nullptr; /* length of each clause */
 
@@ -66,7 +71,8 @@ class OnePlusOneSAT
     add_cl_ret add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused);
 
    private:
-    inline bool value(const Lit l) const {
+    inline bool value(const Lit l) const
+    {
         return Assigns[l.var()] ^ l.sign();
     }
 };
