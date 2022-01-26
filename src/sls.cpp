@@ -54,6 +54,8 @@ lbool SLS::run(const uint32_t num_sls_called)
         return run_walksat();
     } else if (solver->conf.which_sls == "oneplusone") {
         return run_oneplusone();
+    } else if (solver->conf.which_sls == "genetic") {
+        return run_genetic();
     } else if (solver->conf.which_sls == "ccnr_yalsat") {
         if ((num_sls_called % 2) == 0) {
             return run_ccnr(num_sls_called);

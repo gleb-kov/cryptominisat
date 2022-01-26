@@ -20,16 +20,22 @@ class GeneticSAT
     ~GeneticSAT();
 
    private:
-    // void crossover();
+    static constexpr size_t generationSize = 10;
+    static constexpr uint32_t generationCount = 300;
+    static constexpr size_t takenBestCount = 2;
+
+   private:
+    std::vector<std::vector<bool>> activeGeneration;
+    std::vector<size_t> scores;
+
+   private:
+    size_t pickMutationPlayer(size_t totalScore);
+    void two_point_crossover(std::vector<bool>&, std::vector<bool>&);
     // void nextGeneration();
 
    private:
     Solver* solver = nullptr;
 
-    uint32_t lowestbad = std::numeric_limits<uint32_t>::max();
-    std::vector<bool> Assigns; /* value of each var */
-    std::vector<bool> Best_assigns;
-    uint32_t numfalse = 0; /* number of false clauses */
     uint32_t numclauses = 0;
     uint32_t numliterals = 0;
 
@@ -53,17 +59,11 @@ class GeneticSAT
 
    private:
     bool init_problem();
-    void init_for_round();
+    size_t calculate_score(const std::vector<bool>& assigns) const;
 
     enum class add_cl_ret { added_cl, skipped_cl, unsat };
     template <class T>
     add_cl_ret add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused);
-
-   private:
-    inline bool value(const Lit l) const
-    {
-        return Assigns[l.var()] ^ l.sign();
-    }
 };
 
 } // namespace CMSat

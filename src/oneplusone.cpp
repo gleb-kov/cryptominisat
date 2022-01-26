@@ -65,7 +65,7 @@ void OnePlusOneSAT::large_mutation()
 {
     //all assumed and already set variables have been removed
     //from the problem already, so the stuff below is safe.
-    for (uint32_t j = 0; j < solver->nVars(); j++) {
+    for (size_t j = 0; j < solver->nVars(); j++) {
         Assigns[j] = mtrand.randInt(1) != 0;
     }
 }

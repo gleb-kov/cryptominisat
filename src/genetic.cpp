@@ -34,31 +34,88 @@ lbool GeneticSAT::main()
 
     mtrand.seed(solver->mtrand.randInt());
 
-    /*for (size_t i = 0; i < cutoff; ++i) {
-        large_mutation();
-        small_mutation();
-    }*/
+    std::cout << "GENETIC SAT START" << std::endl;
 
-    if (numfalse == 0 || solver->conf.sls_get_phase) {
+    std::set<std::pair<size_t, size_t>> scoreOrdering; // score -> index in activeGeneration
+    size_t scoreSum = 0;
+
+    for (size_t i = 0; i < generationSize; ++i) {
+        for (size_t j = 0; j < solver->nVars(); ++j) {
+            activeGeneration[i][j] = mtrand.randInt(1) != 0;
+        }
+        size_t score = calculate_score(activeGeneration[i]);
+        scores[i] = score;
+        scoreSum += score;
+        scoreOrdering.insert({score, i});
+    }
+
+    for (uint32_t genId = 0; genId < generationCount; ++genId) {
+        std::vector<std::vector<bool>> newGeneration(generationSize);
+        std::vector<size_t> newScores(generationSize);
+        std::set<std::pair<size_t, size_t>> newScoreOrdering;
+        size_t newScoreSum = 0;
+
+        for (size_t i = 0; i < generationSize - takenBestCount; ++i) {
+            const size_t lind = pickMutationPlayer(scoreSum);
+            const size_t rind = pickMutationPlayer(scoreSum);
+
+            std::vector<bool> lhs = activeGeneration[lind];
+            std::vector<bool> rhs = activeGeneration[rind];
+
+            two_point_crossover(lhs, rhs);
+            const size_t lhsScore = calculate_score(lhs);
+            const size_t rhsScore = calculate_score(rhs);
+
+            if (lhsScore > rhsScore) {
+                newGeneration[i] = std::move(rhs);
+                newScores[i] = rhsScore;
+                newScoreOrdering.insert({rhsScore, i});
+                newScoreSum += rhsScore;
+            } else {
+                newGeneration[i] = std::move(lhs);
+                newScores[i] = lhsScore;
+                newScoreOrdering.insert({lhsScore, i});
+                newScoreSum += lhsScore;
+            }
+        }
+
+        auto it = scoreOrdering.begin();
+        for (size_t i = 1; i <= takenBestCount; ++i) {
+            newGeneration[generationSize - i] = std::move(activeGeneration[it->second]);
+            newScores[generationSize - i] = it->first;
+            newScoreOrdering.insert({it->first, generationSize - i});
+            newScoreSum += it->first;
+            ++it;
+        }
+
+        activeGeneration = std::move(newGeneration);
+        scores = std::move(newScores);
+        scoreOrdering = std::move(newScoreOrdering);
+        scoreSum = newScoreSum;
+    }
+
+    const auto& bestMutationInfo = *scoreOrdering.begin();
+
+    if (bestMutationInfo.first == 0 || solver->conf.sls_get_phase) {
         if (solver->conf.verbosity) {
             if (solver->conf.sls_get_phase) {
                 cout << "c [genetic] saving solution as requested"  << endl;
-            } else if (numfalse == 0) {
+            } else if (bestMutationInfo.first == 0) {
                 cout << "c [genetic] ASSIGNMENT FOUND"  << endl;
             }
         }
 
         for(size_t i = 0; i < solver->nVars(); i++) {
-            solver->varData[i].polarity = Best_assigns[i];
+            solver->varData[i].polarity = activeGeneration[bestMutationInfo.second][i];
         }
     }
 
     return l_Undef;
 }
 
-void GeneticSAT::init_for_round()
+size_t GeneticSAT::calculate_score(const std::vector<bool>& assigns) const
 {
-    numfalse = 0;
+    size_t numfalse = 0;
 
     /* initialize truth assignment and changed time */
     for (uint32_t i = 0; i < numclauses; i++) {
@@ -69,7 +126,8 @@ void GeneticSAT::init_for_round()
         uint32_t sz = clsize[i];
         assert(sz >= 1);
         for (uint32_t j = 0; j < sz; j++) {
-            if (value(clause[i][j])) {
+            const auto& literal = clause[i][j];
+            if (assigns[literal.var()] ^ literal.sign()) {
                 numtruelit[i]++;
             }
         }
@@ -77,6 +135,8 @@ void GeneticSAT::init_for_round()
             numfalse++;
         }
     }
+
+    return numfalse;
 }
 
 template<class T>
@@ -153,8 +213,8 @@ bool GeneticSAT::init_problem()
     occurrence = (uint32_t **)malloc(sizeof(uint32_t *) * 2 * solver->nVars());
     numoccurrence = (uint32_t *)malloc(sizeof(uint32_t) * 2 * solver->nVars());
 
-    Assigns.assign(solver->nVars(), true);
-    Best_assigns.assign(solver->nVars(), true);
+    activeGeneration.resize(generationSize, std::vector<bool>(solver->nVars(), true));
+    scores.resize(generationSize, 0);
 
     numliterals = 0;
 
@@ -221,4 +281,33 @@ bool GeneticSAT::init_problem()
     }
 
     return true;
+}
+
+size_t GeneticSAT::pickMutationPlayer(size_t totalScore)
+{
+    static std::mt19937 gen(mtrand.randInt());
+    static std::uniform_real_distribution<long double> uniDist(0.0l, totalScore);
+
+    size_t toFlip = 0;
+    long double weight = uniDist(gen);
+
+    while (toFlip + 1 < scores.size() && 0.0l < weight) {
+        weight -= scores[toFlip];
+        ++toFlip;
+    }
+
+    return toFlip;
+}
+
+void GeneticSAT::two_point_crossover(std::vector<bool> &lhs, std::vector<bool> &rhs)
+{
+    size_t lind = mtrand.randInt() % solver->nVars();
+    size_t rind = mtrand.randInt() % solver->nVars();
+    if (lind > rind) {
+        std::swap(lind, rind);
+    }
+    while (lind < rind) {
+        std::swap(lhs[lind], rhs[lind]);
+        ++lind;
+    }
 }
