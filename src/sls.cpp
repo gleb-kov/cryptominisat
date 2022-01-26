@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "walksat.h"
 #include "ccnr_cms.h"
 #include "oneplusone.h"
+#include "genetic.h"
 
 using namespace CMSat;
 
@@ -99,6 +100,26 @@ lbool SLS::run_oneplusone()
     double maxmem = solver->conf.sls_memoutMB*solver->conf.var_and_mem_out_mult;
     if (mem_needed_mb < maxmem) {
         lbool ret = oneplusone.main();
+        return ret;
+    }
+
+    if (solver->conf.verbosity) {
+        cout << "c [sls] would need "
+             << std::setprecision(2) << std::fixed << mem_needed_mb
+             << " MB but that's over limit of " << std::fixed << maxmem
+             << " MB -- skipping" << endl;
+    }
+
+    return l_Undef;
+}
+
+lbool SLS::run_genetic()
+{
+    GeneticSAT genetic(solver);
+    double mem_needed_mb = (double)approx_mem_needed()/(1000.0*1000.0);
+    double maxmem = solver->conf.sls_memoutMB*solver->conf.var_and_mem_out_mult;
+    if (mem_needed_mb < maxmem) {
+        lbool ret = genetic.main();
         return ret;
     }
 

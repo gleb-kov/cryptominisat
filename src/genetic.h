@@ -1,5 +1,5 @@
-#ifndef CRYPTOMINISAT5_ONEPLUSONE_H
-#define CRYPTOMINISAT5_ONEPLUSONE_H
+#ifndef CRYPTOMINISAT5_GENETIC_H
+#define CRYPTOMINISAT5_GENETIC_H
 
 #include <cstdint>
 #include <cstdio>
@@ -12,23 +12,16 @@ namespace CMSat {
 
 class Solver;
 
-class OnePlusOneSAT
+class GeneticSAT
 {
    public:
     lbool main();
-    OnePlusOneSAT(Solver* _solver);
-    ~OnePlusOneSAT();
+    GeneticSAT(Solver* _solver);
+    ~GeneticSAT();
 
    private:
-    void large_mutation();
-    void small_mutation();
-
-   private:
-    constexpr static long double beta = 3.0l; // 3.0 is proven best
-    long double normalization = 0;            // aka C^beta_{n/2}
-    std::vector<long double> distribution;    // aka P_lambda
-    constexpr static uint64_t lambda = 1;     // (1+lambda)-EA
-    static constexpr uint64_t cutoff = 100;
+    // void crossover();
+    // void nextGeneration();
 
    private:
     Solver* solver = nullptr;
@@ -59,12 +52,8 @@ class OnePlusOneSAT
     MTRand mtrand;
 
    private:
-    uint32_t countVarsToFlip();
     bool init_problem();
     void init_for_round();
-
-    void pickflips(uint32_t flipsCnt);
-    void flipvar(uint32_t varIdx);
 
     enum class add_cl_ret { added_cl, skipped_cl, unsat };
     template <class T>
@@ -79,4 +68,4 @@ class OnePlusOneSAT
 
 } // namespace CMSat
 
-#endif //CRYPTOMINISAT5_ONEPLUSONE_H
+#endif //CRYPTOMINISAT5_GENETIC_H

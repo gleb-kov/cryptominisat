@@ -1,15 +1,15 @@
-#include "oneplusone.h"
+#include "genetic.h"
 #include "solver.h"
 #include <random>
 
 using namespace CMSat;
 
-OnePlusOneSAT::OnePlusOneSAT(Solver* _solver) :
+GeneticSAT::GeneticSAT(Solver* _solver) :
     solver(_solver)
 {
 }
 
-OnePlusOneSAT::~OnePlusOneSAT()
+GeneticSAT::~GeneticSAT()
 {
     free(storebase);
     free(clause);
@@ -20,36 +20,31 @@ OnePlusOneSAT::~OnePlusOneSAT()
     free(numoccurrence);
 }
 
-lbool OnePlusOneSAT::main()
+lbool GeneticSAT::main()
 {
     if (!init_problem()) {
         //it's actually l_False under assumptions
         //but we'll set the real SAT solver deal with that
         if (solver->conf.verbosity) {
-            cout << "c [oneplusone] problem UNSAT under assumptions, returning to main solver"
-            << endl;
+            cout << "c [genetic] problem UNSAT under assumptions, returning to main solver"
+                 << endl;
         }
         return l_Undef;
     }
 
-    // distribution must be divided by normalization, but it isnt, to so tiny float numbers work better
-    for (size_t i = 1; i <= solver->nVars() / 2; ++i) {
-        distribution[i - 1] = 1.0l / std::pow(i, beta);
-        normalization += distribution[i - 1];
-    }
     mtrand.seed(solver->mtrand.randInt());
 
-    for (size_t i = 0; i < cutoff; ++i) {
+    /*for (size_t i = 0; i < cutoff; ++i) {
         large_mutation();
         small_mutation();
-    }
+    }*/
 
     if (numfalse == 0 || solver->conf.sls_get_phase) {
         if (solver->conf.verbosity) {
             if (solver->conf.sls_get_phase) {
-                cout << "c [oneplusone] saving solution as requested"  << endl;
+                cout << "c [genetic] saving solution as requested"  << endl;
             } else if (numfalse == 0) {
-                cout << "c [oneplusone] ASSIGNMENT FOUND"  << endl;
+                cout << "c [genetic] ASSIGNMENT FOUND"  << endl;
             }
         }
 
@@ -61,65 +56,7 @@ lbool OnePlusOneSAT::main()
     return l_Undef;
 }
 
-void OnePlusOneSAT::large_mutation()
-{
-    //all assumed and already set variables have been removed
-    //from the problem already, so the stuff below is safe.
-    for (uint32_t j = 0; j < solver->nVars(); j++) {
-        Assigns[j] = mtrand.randInt(1) != 0;
-    }
-}
-
-void OnePlusOneSAT::small_mutation()
-{
-    bool updated = false;
-    init_for_round();
-
-    for (uint64_t i = 0; i < lambda; ++i) {
-        uint32_t flipsCnt = countVarsToFlip();
-        pickflips(flipsCnt);
-
-        if (numfalse <= lowestbad) {
-            updated = true;
-            lowestbad = numfalse;
-            Best_assigns = Assigns;
-        }
-    }
-
-    if (!updated) {
-        Assigns = Best_assigns;
-    }
-}
-
-void OnePlusOneSAT::flipvar(uint32_t toflip)
-{
-    Lit toenforce = Lit(toflip, Assigns[toflip]);
-    Assigns[toflip] = !Assigns[toflip];
-
-    //True made into False
-    for (uint32_t i = 0; i < numoccurrence[(~toenforce).toInt()]; i++) {
-        uint32_t cli = occurrence[(~toenforce).toInt()][i];
-
-        assert(numtruelit[cli] > 0);
-        numtruelit[cli]--;
-        if (numtruelit[cli] == 0) {
-            numfalse++;
-        }
-    }
-
-    //made into TRUE
-    for (uint32_t i = 0; i < numoccurrence[toenforce.toInt()]; i++) {
-        uint32_t cli = occurrence[toenforce.toInt()][i];
-
-        numtruelit[cli]++;
-        if (numtruelit[cli] == 1) {
-            assert(numfalse > 0);
-            numfalse--;
-        }
-    }
-}
-
-void OnePlusOneSAT::init_for_round()
+void GeneticSAT::init_for_round()
 {
     numfalse = 0;
 
@@ -142,32 +79,8 @@ void OnePlusOneSAT::init_for_round()
     }
 }
 
-uint32_t OnePlusOneSAT::countVarsToFlip()
-{
-    static std::mt19937 gen(mtrand.randInt());
-    static std::uniform_real_distribution<long double> uniDist(0.0l, normalization);
-
-    size_t toFlip = 0;
-    long double weight = uniDist(gen);
-    while (toFlip < distribution.size() && 0.0l < weight) {
-        weight -= distribution[toFlip];
-        ++toFlip;
-    }
-    return toFlip;
-}
-
-void OnePlusOneSAT::pickflips(uint32_t flipsCnt)
-{
-    // mutation rate = toFlip / solver->nVars()
-    // chance of getting the same varIdx twice is negligible
-    for (uint32_t i = 0; i < flipsCnt; ++i) {
-        uint32_t varIdx = mtrand.randInt(solver->nVars() - 1);
-        flipvar(varIdx);
-    }
-}
-
 template<class T>
-OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
+GeneticSAT::add_cl_ret GeneticSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
     uint32_t sz = 0;
     bool sat = false;
     for(size_t i3 = 0; i3 < cl.size(); i3++) {
@@ -202,7 +115,7 @@ OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& 
     if (sz == 0) {
         //it's unsat because of assumptions
         if (solver->conf.verbosity) {
-            cout << "c [oneplusone] UNSAT because of assumptions in clause: " << cl << endl;
+            cout << "c [genetic] UNSAT because of assumptions in clause: " << cl << endl;
         }
         return add_cl_ret::unsat;
     }
@@ -216,7 +129,7 @@ OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& 
     return add_cl_ret::added_cl;
 }
 
-bool OnePlusOneSAT::init_problem()
+bool GeneticSAT::init_problem()
 {
     if (solver->check_assumptions_contradict_foced_assignment())
     {
@@ -242,7 +155,6 @@ bool OnePlusOneSAT::init_problem()
 
     Assigns.assign(solver->nVars(), true);
     Best_assigns.assign(solver->nVars(), true);
-    distribution.resize(solver->nVars() / 2);
 
     numliterals = 0;
 
@@ -287,7 +199,7 @@ bool OnePlusOneSAT::init_problem()
     for (uint32_t i2 = 0; i2 < solver->nVars()*2; i2++) {
         const Lit lit = Lit::toLit(i2);
         if (i > numliterals) {
-            cout << "ERROR: Oneplusone -- allocating occurrence lists is wrong" << endl;
+            cout << "ERROR: Genetic -- allocating occurrence lists is wrong" << endl;
             exit(-1);
         }
         occurrence[lit.toInt()] = &(occur_list_alloc[i]);

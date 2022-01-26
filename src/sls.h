@@ -40,6 +40,7 @@ private:
 
     lbool run_walksat();
     lbool run_oneplusone();
+    lbool run_genetic();
 
     #ifdef USE_YALSAT
     lbool run_yalsat();

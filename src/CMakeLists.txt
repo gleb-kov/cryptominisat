@@ -112,6 +112,7 @@ set(cryptoms_lib_files
     ccnr_cms.cpp
     lucky.cpp
     oneplusone.cpp
+    genetic.cpp
 #    watcharray.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
 )
