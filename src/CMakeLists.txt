@@ -21,13 +21,8 @@
 include_directories( ${PROJECT_SOURCE_DIR} )
 include_directories( ${BOSPHORUS_INCLUDE_DIRS} )
 
-if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS})
-endif()
-
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
-
 if (NOT WIN32)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
     add_cxx_flag_if_supported("-Wno-bitfield-constant-conversion")
     #add_cxx_flag_if_supported("-Wduplicated-cond")
     #add_cxx_flag_if_supported("-Wduplicated-branches")
@@ -373,7 +368,7 @@ if (NOT ONLY_SIMPLE)
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
         INSTALL_RPATH_USE_LINK_PATH TRUE)
     target_link_libraries(cryptominisat5-bin
-        ${Boost_LIBRARIES}
+        Boost::program_options
         ${cryptoms_exec_link_libs}
     )
     install(TARGETS cryptominisat5-bin
