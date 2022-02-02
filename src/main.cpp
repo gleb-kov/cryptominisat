@@ -1099,7 +1099,8 @@ void Main::manually_parse_some_options()
 
     if (conf.which_sls != "yalsat" &&
         conf.which_sls != "walksat" &&
-        conf.which_sls != "oneplusone" &&
+        conf.which_sls != "oneplusonefea" &&
+        conf.which_sls != "oneplusonefeaup" &&
         conf.which_sls != "genetic" &&
         conf.which_sls != "ccnr_yalsat" &&
         conf.which_sls != "ccnr")

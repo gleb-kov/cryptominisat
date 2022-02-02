@@ -1,26 +1,29 @@
-#include "oneplusone.h"
+#include "oneplusonefeaup.h"
 #include "solver.h"
+
 #include <random>
+#include <unordered_set>
+#include <unordered_map>
+#include <set>
 
 using namespace CMSat;
 
-OnePlusOneSAT::OnePlusOneSAT(Solver* _solver) :
+OnePlusOneFeaUnitPropSAT::OnePlusOneFeaUnitPropSAT(Solver* _solver) :
     solver(_solver)
 {
 }
 
-OnePlusOneSAT::~OnePlusOneSAT()
+OnePlusOneFeaUnitPropSAT::~OnePlusOneFeaUnitPropSAT()
 {
     free(storebase);
     free(clause);
     free(clsize);
-    free(numtruelit);
     free(occur_list_alloc);
     free(occurrence);
     free(numoccurrence);
 }
 
-lbool OnePlusOneSAT::main()
+lbool OnePlusOneFeaUnitPropSAT::main()
 {
     if (!init_problem()) {
         //it's actually l_False under assumptions
@@ -32,23 +35,42 @@ lbool OnePlusOneSAT::main()
         return l_Undef;
     }
 
+    assert(availableForFlip > 0);
+    assert(availableForFlip <= solver->nVars());
     // distribution must be divided by normalization, but it isnt, to so tiny float numbers work better
-    for (size_t i = 1; i <= solver->nVars() / 2; ++i) {
+    for (size_t i = 1; i <= availableForFlip / 2; ++i) {
         distribution[i - 1] = 1.0l / std::pow(i, beta);
         normalization += distribution[i - 1];
     }
     mtrand.seed(solver->mtrand.randInt());
 
     for (size_t i = 0; i < cutoff; ++i) {
+        std::cout << i << ' ' << lowestbad << std::endl;
         large_mutation();
-        small_mutation();
+        size_t remaining = try_unit_propagation();
+        if (remaining < lowestbad){
+            lowestbad = remaining;
+            Best_assigns = Assigns;
+        }
     }
 
-    if (numfalse == 0 || solver->conf.sls_get_phase) {
+    for (size_t i = 0; i < cutoff; ++i) {
+        std::cout << "small" << i << ' ' << lowestbad << std::endl;
+        small_mutation();
+        size_t remaining = try_unit_propagation();
+        if (remaining < lowestbad){
+            lowestbad = remaining;
+            Best_assigns = Assigns;
+        } else {
+            Assigns = Best_assigns;
+        }
+    }
+
+    if (lowestbad == 0 || solver->conf.sls_get_phase) {
         if (solver->conf.verbosity) {
             if (solver->conf.sls_get_phase) {
                 cout << "c [oneplusone] saving solution as requested"  << endl;
-            } else if (numfalse == 0) {
+            } else if (lowestbad == 0) {
                 cout << "c [oneplusone] ASSIGNMENT FOUND"  << endl;
             }
         }
@@ -61,113 +83,135 @@ lbool OnePlusOneSAT::main()
     return l_Undef;
 }
 
-void OnePlusOneSAT::large_mutation()
+void OnePlusOneFeaUnitPropSAT::large_mutation()
 {
     //all assumed and already set variables have been removed
     //from the problem already, so the stuff below is safe.
-    for (size_t j = 0; j < solver->nVars(); j++) {
+    for (size_t j = 0; j < availableForFlip; j++) {
         Assigns[j] = mtrand.randInt(1) != 0;
     }
 }
 
-void OnePlusOneSAT::small_mutation()
+void OnePlusOneFeaUnitPropSAT::small_mutation()
 {
-    bool updated = false;
-    init_for_round();
-
     for (uint64_t i = 0; i < lambda; ++i) {
         uint32_t flipsCnt = countVarsToFlip();
         pickflips(flipsCnt);
-
-        if (numfalse <= lowestbad) {
-            updated = true;
-            lowestbad = numfalse;
-            Best_assigns = Assigns;
-        }
-    }
-
-    if (!updated) {
-        Assigns = Best_assigns;
     }
 }
 
-void OnePlusOneSAT::flipvar(uint32_t toflip)
-{
-    Lit toenforce = Lit(toflip, Assigns[toflip]);
-    Assigns[toflip] = !Assigns[toflip];
-
-    //True made into False
-    for (uint32_t i = 0; i < numoccurrence[(~toenforce).toInt()]; i++) {
-        uint32_t cli = occurrence[(~toenforce).toInt()][i];
-
-        assert(numtruelit[cli] > 0);
-        numtruelit[cli]--;
-        if (numtruelit[cli] == 0) {
-            numfalse++;
-        }
-    }
-
-    //made into TRUE
-    for (uint32_t i = 0; i < numoccurrence[toenforce.toInt()]; i++) {
-        uint32_t cli = occurrence[toenforce.toInt()][i];
-
-        numtruelit[cli]++;
-        if (numtruelit[cli] == 1) {
-            assert(numfalse > 0);
-            numfalse--;
-        }
-    }
-}
-
-void OnePlusOneSAT::init_for_round()
-{
-    numfalse = 0;
-
-    /* initialize truth assignment and changed time */
-    for (uint32_t i = 0; i < numclauses; i++) {
-        numtruelit[i] = 0;
-    }
-
-    for (uint32_t i = 0; i < numclauses; i++) {
-        uint32_t sz = clsize[i];
-        assert(sz >= 1);
-        for (uint32_t j = 0; j < sz; j++) {
-            if (value(clause[i][j])) {
-                numtruelit[i]++;
-            }
-        }
-        if (numtruelit[i] == 0) {
-            numfalse++;
-        }
-    }
-}
-
-uint32_t OnePlusOneSAT::countVarsToFlip()
+uint32_t OnePlusOneFeaUnitPropSAT::countVarsToFlip()
 {
     static std::mt19937 gen(mtrand.randInt());
     static std::uniform_real_distribution<long double> uniDist(0.0l, normalization);
 
     size_t toFlip = 0;
     long double weight = uniDist(gen);
-    while (toFlip < distribution.size() && 0.0l < weight) {
+
+    while (toFlip + 1 < distribution.size() && 0.0l < weight) {
         weight -= distribution[toFlip];
         ++toFlip;
     }
+
     return toFlip;
 }
 
-void OnePlusOneSAT::pickflips(uint32_t flipsCnt)
+void OnePlusOneFeaUnitPropSAT::pickflips(uint32_t flipsCnt)
 {
     // mutation rate = toFlip / solver->nVars()
     // chance of getting the same varIdx twice is negligible
     for (uint32_t i = 0; i < flipsCnt; ++i) {
         uint32_t varIdx = mtrand.randInt(solver->nVars() - 1);
-        flipvar(varIdx);
+        Assigns[varIdx] = !Assigns[varIdx];
     }
 }
 
+size_t OnePlusOneFeaUnitPropSAT::try_unit_propagation()
+{
+    std::unordered_set<size_t> definedVariables;
+    std::unordered_set<size_t> propagatedClauses;
+    std::unordered_map<uint32_t, uint32_t> remainingLiterals; // clauseIdx -> remaining
+    std::set<std::pair<size_t, size_t>> minimalClauses; // remaining size of clause, clause_id
+
+    for (uint32_t i = 0; i < numclauses; ++i) {
+        remainingLiterals[i] = clsize[i];
+        minimalClauses.insert({clsize[i], i});
+    }
+
+    auto propagateClauseByVariable = [&](size_t varIdx, size_t clauseIdx) {
+        if (remainingLiterals.count(clauseIdx) == 0) {
+            return;
+        }
+        bool satisfied = false;
+        for (uint32_t j = 0; j < clsize[clauseIdx]; ++j) {
+            const auto& cl = clause[clauseIdx][j];
+            if (cl.var() == varIdx && value(cl)) {
+                satisfied = true;
+            }
+        }
+
+        if (satisfied) {
+            propagatedClauses.insert(clauseIdx);
+            minimalClauses.erase({remainingLiterals[clauseIdx], clauseIdx});
+            remainingLiterals.erase(clauseIdx);
+        } else if (remainingLiterals[clauseIdx] > 1) {
+            minimalClauses.erase({remainingLiterals[clauseIdx], clauseIdx});
+            --remainingLiterals[clauseIdx];
+            minimalClauses.insert({remainingLiterals[clauseIdx], clauseIdx});
+        } else {
+            minimalClauses.erase({remainingLiterals[clauseIdx], clauseIdx});
+            remainingLiterals.erase(clauseIdx);
+        }
+    };
+
+    auto propagateByVariable = [&](size_t varIdx) {
+        Lit toenforce = Lit(varIdx, Assigns[varIdx]);
+
+        for (uint32_t i = 0; i < numoccurrence[(~toenforce).toInt()]; ++i) {
+            uint32_t cli = occurrence[(~toenforce).toInt()][i];
+            propagateClauseByVariable(varIdx, cli);
+        }
+        for (uint32_t i = 0; i < numoccurrence[toenforce.toInt()]; ++i) {
+            uint32_t cli = occurrence[toenforce.toInt()][i];
+            propagateClauseByVariable(varIdx, cli);
+        }
+    };
+
+    for (size_t i = 0; i < availableForFlip; ++i) {
+        definedVariables.insert(i);
+        propagateByVariable(i);
+    }
+
+    while (!minimalClauses.empty()) {
+        const size_t clauseIdx = minimalClauses.begin()->second;
+        if (remainingLiterals.count(clauseIdx) == 0) {
+            continue;
+        }
+
+        size_t varIdx = 0;
+
+        for (uint32_t i = 0; i < clsize[clauseIdx]; ++i) {
+            const auto& lit = clause[clauseIdx][i];
+            if (definedVariables.count(lit.var()) > 0) {
+                continue;
+            }
+            assert(varIdx == 0);
+            varIdx = lit.var();
+            Assigns[varIdx] = !lit.sign();
+            definedVariables.insert(varIdx);
+            break;
+        }
+
+        assert(varIdx != 0);
+        propagateByVariable(varIdx);
+    }
+
+    assert(minimalClauses.size() == remainingLiterals.size());
+    return numclauses - propagatedClauses.size();
+}
+
 template<class T>
-OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
+OnePlusOneFeaUnitPropSAT::add_cl_ret OnePlusOneFeaUnitPropSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
     uint32_t sz = 0;
     bool sat = false;
     for(size_t i3 = 0; i3 < cl.size(); i3++) {
@@ -216,7 +260,7 @@ OnePlusOneSAT::add_cl_ret OnePlusOneSAT::add_this_clause(const T& cl, uint32_t& 
     return add_cl_ret::added_cl;
 }
 
-bool OnePlusOneSAT::init_problem()
+bool OnePlusOneFeaUnitPropSAT::init_problem()
 {
     if (solver->check_assumptions_contradict_foced_assignment())
     {
@@ -236,13 +280,12 @@ bool OnePlusOneSAT::init_problem()
     clause = (Lit **)malloc(sizeof(Lit *) * numclauses);
     clsize = (uint32_t *)malloc(sizeof(uint32_t) * numclauses);
 
-    numtruelit = (uint32_t *)malloc(sizeof(uint32_t) * numclauses);
     occurrence = (uint32_t **)malloc(sizeof(uint32_t *) * 2 * solver->nVars());
     numoccurrence = (uint32_t *)malloc(sizeof(uint32_t) * 2 * solver->nVars());
 
     Assigns.assign(solver->nVars(), true);
     Best_assigns.assign(solver->nVars(), true);
-    distribution.resize(solver->nVars() / 2);
+    distribution.resize(solver->nVars() / 2, 0);
 
     numliterals = 0;
 

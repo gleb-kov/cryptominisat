@@ -27,7 +27,8 @@ THE SOFTWARE.
 #endif
 #include "walksat.h"
 #include "ccnr_cms.h"
-#include "oneplusone.h"
+#include "oneplusonefea.h"
+#include "oneplusonefeaup.h"
 #include "genetic.h"
 
 using namespace CMSat;
@@ -52,8 +53,10 @@ lbool SLS::run(const uint32_t num_sls_called)
         return run_ccnr(num_sls_called);
     } else if (solver->conf.which_sls == "walksat") {
         return run_walksat();
-    } else if (solver->conf.which_sls == "oneplusone") {
-        return run_oneplusone();
+    } else if (solver->conf.which_sls == "oneplusonefea") {
+        return run_oneplusonefea();
+    } else if (solver->conf.which_sls == "oneplusonefeaup") {
+        return run_oneplusonefeaup();
     } else if (solver->conf.which_sls == "genetic") {
         return run_genetic();
     } else if (solver->conf.which_sls == "ccnr_yalsat") {
@@ -95,9 +98,29 @@ lbool SLS::run_walksat()
     return l_Undef;
 }
 
-lbool SLS::run_oneplusone()
+lbool SLS::run_oneplusonefea()
 {
-    OnePlusOneSAT oneplusone(solver);
+    OnePlusOneFeaSAT oneplusone(solver);
+    double mem_needed_mb = (double)approx_mem_needed()/(1000.0*1000.0);
+    double maxmem = solver->conf.sls_memoutMB*solver->conf.var_and_mem_out_mult;
+    if (mem_needed_mb < maxmem) {
+        lbool ret = oneplusone.main();
+        return ret;
+    }
+
+    if (solver->conf.verbosity) {
+        cout << "c [sls] would need "
+             << std::setprecision(2) << std::fixed << mem_needed_mb
+             << " MB but that's over limit of " << std::fixed << maxmem
+             << " MB -- skipping" << endl;
+    }
+
+    return l_Undef;
+}
+
+lbool SLS::run_oneplusonefeaup()
+{
+    OnePlusOneFeaUnitPropSAT oneplusone(solver);
     double mem_needed_mb = (double)approx_mem_needed()/(1000.0*1000.0);
     double maxmem = solver->conf.sls_memoutMB*solver->conf.var_and_mem_out_mult;
     if (mem_needed_mb < maxmem) {

@@ -1,5 +1,5 @@
-#ifndef CRYPTOMINISAT5_ONEPLUSONE_H
-#define CRYPTOMINISAT5_ONEPLUSONE_H
+#ifndef CRYPTOMINISAT5_ONEPLUSONEFEAUP_H
+#define CRYPTOMINISAT5_ONEPLUSONEFEAUP_H
 
 #include <cstdint>
 #include <cstdio>
@@ -12,12 +12,12 @@ namespace CMSat {
 
 class Solver;
 
-class OnePlusOneUPSAT
+class OnePlusOneFeaUnitPropSAT
 {
    public:
     lbool main();
-    OnePlusOneUPSAT(Solver* _solver);
-    ~OnePlusOneUPSAT();
+    OnePlusOneFeaUnitPropSAT(Solver* _solver);
+    ~OnePlusOneFeaUnitPropSAT();
 
    private:
     void large_mutation();
@@ -77,4 +77,4 @@ class OnePlusOneUPSAT
 
 } // namespace CMSat
 
-#endif //CRYPTOMINISAT5_ONEPLUSONE_H
+#endif //CRYPTOMINISAT5_ONEPLUSONEFEAUP_H
