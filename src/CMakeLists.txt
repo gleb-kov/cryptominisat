@@ -111,6 +111,7 @@ set(cryptoms_lib_files
     ccnr.cpp
     ccnr_cms.cpp
     lucky.cpp
+    oneplusone.cpp
     oneplusonefea.cpp
     oneplusonefeaup.cpp
     genetic.cpp

@@ -130,7 +130,6 @@ void WalkSAT::main_iteration(bool onlyCores) {
             }
 
             for (uint64_t mergeVarMask = init_merge_var_mask; mergeVarMask < (1u << mergeVarSubIdx); ++mergeVarMask) {
-                cout << mergeVarIdx << ' ' << mergeVarSubIdx << ' ' << mergeVarMask << endl;
                 uint64_t tmpMergeVarMask = mergeVarMask;
 
                 for (size_t varSubIdx = mergeVarSubIdx; varSubIdx >= 1; --varSubIdx) {
@@ -144,7 +143,6 @@ void WalkSAT::main_iteration(bool onlyCores) {
                 }
 
                 numtry++;
-                cout << numtry << endl;
                 init_for_round();
                 update_statistics_start_try();
                 numflip = 0;

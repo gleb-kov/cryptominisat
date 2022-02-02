@@ -39,6 +39,7 @@ private:
     Solver* solver;
 
     lbool run_walksat();
+    lbool run_oneplusone();
     lbool run_oneplusonefea();
     lbool run_oneplusonefeaup();
     lbool run_genetic();
