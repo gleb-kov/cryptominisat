@@ -1106,7 +1106,7 @@ void Main::manually_parse_some_options()
         conf.which_sls != "ccnr")
     {
         cout << "ERROR: you gave '" << conf.which_sls << " for SLS with the option '--slstype'."
-        << " This is incorrect, we only accept 'yalsat', 'walksat', 'oneplusone', 'genetic'"
+        << " This is incorrect, we only accept 'yalsat', 'walksat', 'oneplusonefea', 'oneplusonefeaup', 'genetic'"
         << endl;
     }
 

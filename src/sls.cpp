@@ -75,7 +75,7 @@ lbool SLS::run(const uint32_t num_sls_called)
         }
     } else {
         cout << "ERROR: SLS configuration '" << solver->conf.which_sls
-        << "' does not exist. Only 'walksat', 'yalsat' and 'ccnr' are acceptable."
+        << "' does not exist. Only 'yalsat', 'walksat', 'oneplusonefea', 'oneplusonefeaup', 'genetic' are acceptable."
         << endl;
         exit(-1);
     }

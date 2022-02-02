@@ -240,6 +240,7 @@ public:
 
         if (ret == l_True) {
             print_model(solver, &std::cout);
+            solver->print_stats();
         }
 
         if (dratf) {
