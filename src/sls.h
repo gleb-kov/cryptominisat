@@ -38,6 +38,8 @@ public:
 private:
     Solver* solver;
 
+    lbool run_walksat();
+    lbool run_walksatlm();
     lbool run_walksatmvt();
     lbool run_oneplusone();
     lbool run_oneplusonefea();

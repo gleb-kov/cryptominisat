@@ -476,7 +476,7 @@ void Main::add_supported_options()
     ("sls", po::value(&conf.doSLS)->default_value(conf.doSLS)
         , "Run SLS during simplification")
     ("slstype", po::value(&conf.which_sls)->default_value(conf.which_sls)
-        , "Which SLS to run. Allowed values: walksat, oneplusone, yalsat, ccnr, ccnr_yalsat")
+        , "Which SLS to run. Allowed values: walksat, walksatlm, walksatmvt, oneplusone, yalsat, ccnr, ccnr_yalsat")
     ("slsmaxmem", po::value(&conf.sls_memoutMB)->default_value(conf.sls_memoutMB)
         , "Maximum number of MB to give to SLS solver. Doesn't run SLS solver if the memory usage would be more than this.")
     ("slseveryn", po::value(&conf.sls_every_n)->default_value(conf.sls_every_n)
@@ -1099,6 +1099,8 @@ void Main::manually_parse_some_options()
 
     if (conf.which_sls != "yalsat" &&
         conf.which_sls != "walksat" &&
+        conf.which_sls != "walksatlm" &&
+        conf.which_sls != "walksatmvt" &&
         conf.which_sls != "oneplusonefea" &&
         conf.which_sls != "oneplusonefeaup" &&
         conf.which_sls != "genetic" &&
