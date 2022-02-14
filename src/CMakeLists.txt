@@ -106,6 +106,7 @@ set(cryptoms_lib_files
     cardfinder.cpp
     cryptominisat_c.cpp
     walksat.cpp
+    walksatmvt.cpp
     sls.cpp
     vardistgen.cpp
     ccnr.cpp

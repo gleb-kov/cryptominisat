@@ -52,8 +52,8 @@ lbool SLS::run(const uint32_t num_sls_called)
 #endif
     } else if (solver->conf.which_sls == "ccnr") {
         return run_ccnr(num_sls_called);
-    } else if (solver->conf.which_sls == "walksat") {
-        return run_walksat();
+    } else if (solver->conf.which_sls == "walksatmvt") {
+        return run_walksatmvt();
     } else if (solver->conf.which_sls == "oneplusone") {
         return run_oneplusone();
     } else if (solver->conf.which_sls == "oneplusonefea") {
@@ -75,15 +75,15 @@ lbool SLS::run(const uint32_t num_sls_called)
         }
     } else {
         cout << "ERROR: SLS configuration '" << solver->conf.which_sls
-        << "' does not exist. Only 'yalsat', 'walksat', 'oneplusonefea', 'oneplusonefeaup', 'genetic' are acceptable."
+        << "' does not exist. Only 'yalsat', 'walksat', 'walksatmvt', 'oneplusonefea', 'oneplusonefeaup', 'genetic' are acceptable."
         << endl;
         exit(-1);
     }
 }
 
-lbool SLS::run_walksat()
+lbool SLS::run_walksatmvt()
 {
-    WalkSAT walksat(solver);
+    WalkMvtSAT walksat(solver);
     double mem_needed_mb = (double)approx_mem_needed()/(1000.0*1000.0);
     double maxmem = solver->conf.sls_memoutMB*solver->conf.var_and_mem_out_mult;
     if (mem_needed_mb < maxmem) {

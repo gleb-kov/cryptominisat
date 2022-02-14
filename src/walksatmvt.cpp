@@ -21,29 +21,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ***********************************************/
 
-#include "time_mem.h"
-#include <limits>
-#include <cstdio>
-#include <cmath>
-#include <cstdlib>
-#include "constants.h"
 #include "walksat.h"
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <limits>
+#include <random>
+#include "constants.h"
 #include "solver.h"
+#include "time_mem.h"
 //#define SLOW_DEBUG
 
 using namespace CMSat;
 
-uint32_t WalkSAT::RANDMOD(uint32_t d)
+uint32_t WalkMvtSAT::RANDMOD(uint32_t d)
 {
     return d > 1 ? mtrand.randInt(d-1) : 0;
 }
 
-WalkSAT::WalkSAT(Solver* _solver) :
+WalkMvtSAT::WalkMvtSAT(Solver* _solver) :
     solver(_solver)
 {
 }
 
-WalkSAT::~WalkSAT()
+WalkMvtSAT::~WalkMvtSAT()
 {
     free(storebase);
     free(clause);
@@ -56,20 +57,18 @@ WalkSAT::~WalkSAT()
     free(occur_list_alloc);
     free(occurrence);
     free(numoccurrence);
-    free(assigns);
-    free(best_assigns);
     free(breakcount);
     free(makecount);
     free(changed);
 }
 
-lbool WalkSAT::main()
+lbool WalkMvtSAT::main()
 {
     //It might not work well with few number of variables
     //rnovelty could also die/exit(-1), etc.
     if (solver->nVars() < 50) {
         if (solver->conf.verbosity) {
-            cout << "c [walksat] too few variables for walksat"
+            cout << "c [WalkMvtSAT] too few variables for WalkMvtSAT"
             << endl;
         }
         return l_Undef;
@@ -82,52 +81,96 @@ lbool WalkSAT::main()
         //it's actually l_False under assumptions
         //but we'll set the real SAT solver deal with that
         if (solver->conf.verbosity) {
-            cout << "c [walksat] problem UNSAT under assumptions, returning to main solver"
+            cout << "c [WalkMvtSAT] problem UNSAT under assumptions, returning to main solver"
             << endl;
         }
         return l_Undef;
     }
+
     initialize_statistics();
     print_statistics_header();
 
-    uint32_t last_low_bad = 1000;
     lowestbad = std::numeric_limits<uint32_t>::max();
-    while (!found_solution && numtry < solver->conf.walksat_max_runs) {
-        numtry++;
-        init_for_round();
-        update_statistics_start_try();
-        numflip = 0;
 
-        while (!found_solution && (numfalse > 0) && (numflip < cutoff)) {
-            numflip++;
-
-            uint32_t var = pickrnovelty();
-            flipvar(var);
-            update_statistics_end_flip();
-        }
-        #ifdef SLOW_DEBUG
-        check_make_break();
-        #endif
-        update_and_print_statistics_end_try();
-
-        //Trying to early exit in case it's not really working
-        int diff = (int)last_low_bad-(int)lowbad;
-        if ((numtry > 3 && lowbad > 1000)
-            || (numtry > 3 && lowbad > 300 && diff < 20 )
-            || (numtry > 10 && lowbad > 50)
-        ) {
-            if (solver->conf.verbosity) {
-                cout << "c [walksat] abandoning, lowbad is too high" << endl;
-            }
+    main_iteration(false);
+    for (int i = 0; i < 5; ++i) {
+        if (found_solution) {
             break;
         }
-        last_low_bad = lowbad;
+        main_iteration(true);
     }
+
     print_statistics_final();
     return l_Undef;
 }
 
-void WalkSAT::WalkSAT::flipvar(uint32_t toflip)
+void WalkMvtSAT::main_iteration(bool onlyCores) {
+    vector<size_t> vars_permutation(numvars);
+    const uint64_t maxFlipsPerIteration = (onlyCores ? 50 * cutoff : cutoff);
+    const size_t mergeVarsCnt = (onlyCores ? CORE_VARS : numvars) / mergingBlockSize;
+    for (size_t i = 0; i < mergeVarsCnt * mergingBlockSize; ++i) {
+        vars_permutation[i] = i;
+    }
+    std::shuffle(vars_permutation.begin(),
+                 vars_permutation.begin() + mergeVarsCnt * mergingBlockSize,
+                 std::mt19937(mtrand.randInt()));
+
+    while (!found_solution && numtry < solver->conf.walksat_max_runs) {
+        for (size_t mergeVarIdx = 0; mergeVarIdx < mergeVarsCnt; ++mergeVarIdx) {
+            uint64_t init_merge_var_mask = 0;
+            size_t mergeVarSubIdx = 0;
+
+            for (; mergeVarSubIdx < mergingBlockSize; ++mergeVarSubIdx) {
+                size_t atomIdx = mergeVarIdx * mergingBlockSize + mergeVarSubIdx;
+                size_t varIdx = vars_permutation[atomIdx];
+                init_merge_var_mask <<= 1u;
+                if (assigns[varIdx] == l_True) {
+                    init_merge_var_mask |= 1u;
+                }
+            }
+
+            for (uint64_t mergeVarMask = init_merge_var_mask; mergeVarMask < (1u << mergeVarSubIdx); ++mergeVarMask) {
+                uint64_t tmpMergeVarMask = mergeVarMask;
+
+                for (size_t varSubIdx = mergeVarSubIdx; varSubIdx >= 1; --varSubIdx) {
+                    size_t atomIdx = mergeVarIdx * mergingBlockSize + varSubIdx;
+                    size_t varIdx = vars_permutation[atomIdx];
+                    assigns[varIdx] = l_False;
+                    if (tmpMergeVarMask & 1u) {
+                        assigns[varIdx] = l_True;
+                    }
+                    tmpMergeVarMask >>= 1u;
+                }
+
+                numtry++;
+                init_for_round();
+                update_statistics_start_try();
+                numflip = 0;
+
+                while (!found_solution && (numfalse > 0) && (numflip < maxFlipsPerIteration)) {
+                    numflip++;
+                    uint32_t var = pickrnovelty(onlyCores);
+                    flipvar(var);
+                    update_statistics_end_flip();
+                }
+
+                update_and_print_statistics_end_try();
+            }
+
+            if (numtry >= solver->conf.walksat_max_runs) {
+                break;
+            }
+
+            for (uint32_t i = 0; i < numvars; i++) {
+                //all assumed and already set variables have been removed
+                //from the problem already, so the stuff below is safe.
+                assigns[i] = mtrand.randInt(1) ? l_True : l_False;
+            }
+        }
+    }
+}
+
+void WalkMvtSAT::WalkMvtSAT::flipvar(uint32_t toflip)
 {
     Lit toenforce;
     uint32_t numocc;
@@ -234,7 +277,7 @@ void WalkSAT::WalkSAT::flipvar(uint32_t toflip)
     }
 }
 
-void WalkSAT::check_make_break() {
+void WalkMvtSAT::check_make_break() {
     vector<uint32_t> makecount_check(numvars, 0);
     vector<uint32_t> breakcount_check(numvars, 0);
     vector<uint32_t> numtruelit_check(numclauses, 0);
@@ -276,12 +319,12 @@ void WalkSAT::check_make_break() {
 /* Initialization                   */
 /************************************/
 
-void WalkSAT::parse_parameters()
+void WalkMvtSAT::parse_parameters()
 {
     numerator = walk_probability * denominator;
 }
 
-void WalkSAT::init_for_round()
+void WalkMvtSAT::init_for_round()
 {
     assert(solver->decisionLevel() == 0);
     assert(solver->okay());
@@ -298,9 +341,6 @@ void WalkSAT::init_for_round()
     for (uint32_t i = 0; i < numvars; i++) {
         breakcount[i] = 0;
         makecount[i] = 0;
-        //all assumed and already set variables have been removed
-        //from the problem already, so the stuff below is safe.
-        assigns[i] = mtrand.randInt(1) ? l_True: l_False;
     }
 
     /* initialize truth assignment and changed time */
@@ -313,7 +353,11 @@ void WalkSAT::init_for_round()
         Lit thetruelit = lit_Undef;
         uint32_t sz = clsize[i];
         assert(sz >= 1);
+        bool hasCoreVars = false;
         for (uint32_t j = 0; j < sz; j++) {
+            if (clause[i][j].var() < CORE_VARS) {
+                hasCoreVars = true;
+            }
             if (value(clause[i][j]) == l_True) {
                 numtruelit[i]++;
                 thetruelit = clause[i][j];
@@ -323,6 +367,9 @@ void WalkSAT::init_for_round()
             map_cl_to_false_cls[i] = numfalse;
             false_cls[numfalse] = i;
             numfalse++;
+            if (hasCoreVars) {
+                numfalseViaCore++;
+            }
             for (uint32_t j = 0; j < clsize[i]; j++) {
                 makecount[clause[i][j].var()]++;
             }
@@ -337,7 +384,7 @@ void WalkSAT::init_for_round()
 }
 
 template<class T>
-WalkSAT::add_cl_ret WalkSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
+WalkMvtSAT::add_cl_ret WalkMvtSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t& storeused) {
     uint32_t sz = 0;
     bool sat = false;
     for(size_t i3 = 0; i3 < cl.size(); i3++) {
@@ -374,7 +421,7 @@ WalkSAT::add_cl_ret WalkSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t&
     if (sz == 0) {
         //it's unsat because of assumptions
         if (solver->conf.verbosity) {
-            cout << "c [walksat] UNSAT because of assumptions in clause: " << cl << endl;
+            cout << "c [WalkMvtSAT] UNSAT because of assumptions in clause: " << cl << endl;
         }
         return add_cl_ret::unsat;
     }
@@ -389,7 +436,7 @@ WalkSAT::add_cl_ret WalkSAT::add_this_clause(const T& cl, uint32_t& i, uint32_t&
     return add_cl_ret::added_cl;
 }
 
-bool WalkSAT::init_problem()
+bool WalkMvtSAT::init_problem()
 {
     if (solver->check_assumptions_contradict_foced_assignment())
     {
@@ -414,8 +461,8 @@ bool WalkSAT::init_problem()
 
     occurrence = (uint32_t **)calloc(sizeof(uint32_t *), (2 * numvars));
     numoccurrence = (uint32_t *)calloc(sizeof(uint32_t), (2 * numvars));
-    assigns = (lbool *)calloc(sizeof(lbool), numvars);
-    best_assigns = (lbool *)calloc(sizeof(lbool), numvars);
+    assigns.assign(numvars, l_True);
+    best_assigns.assign(numvars, l_True);
     breakcount = (uint32_t *)calloc(sizeof(uint32_t), numvars);
     changed = (int64_t *)calloc(sizeof(int64_t), numvars);
     makecount = (uint32_t *)calloc(sizeof(uint32_t), numvars);
@@ -474,7 +521,7 @@ bool WalkSAT::init_problem()
     for (uint32_t i2 = 0; i2 < numvars*2; i2++) {
         const Lit lit = Lit::toLit(i2);
         if (i > numliterals) {
-            cout << "ERROR: Walksat -- allocating occurrence lists is wrong" << endl;
+            cout << "ERROR: WalkMvtSAT -- allocating occurrence lists is wrong" << endl;
             exit(-1);
         }
         occurrence[lit.toInt()] = &(occur_list_alloc[i]);
@@ -507,52 +554,53 @@ bool WalkSAT::init_problem()
 /* Printing and Statistics          */
 /************************************/
 
-void WalkSAT::print_parameters()
+void WalkMvtSAT::print_parameters()
 {
     if (solver->conf.verbosity) {
-        cout << "c [walksat] Mate Soos, based on WALKSAT v56 by Henry Kautz" << endl;
-        cout << "c [walksat] cutoff = %" << cutoff << endl;
-        cout << "c [walksat] tries = " << solver->conf.walksat_max_runs << endl;
-        cout << "c [walksat] walk probabability = "
+        cout << "c [WalkMvtSAT] Mate Soos, based on WalkMvtSAT v56 by Henry Kautz" << endl;
+        cout << "c [WalkMvtSAT] cutoff = %" << cutoff << endl;
+        cout << "c [WalkMvtSAT] tries = " << solver->conf.walksat_max_runs << endl;
+        cout << "c [WalkMvtSAT] walk probabability = "
         << std::fixed << std::setprecision(2) << walk_probability << endl;
+        cout << "c [WalkMvtSAT] merge block size = " << mergingBlockSize << endl;
     }
 }
 
-void WalkSAT::initialize_statistics()
+void WalkMvtSAT::initialize_statistics()
 {
     x = 0;
     r = 0;
     tail_start_flip = tail * numvars;
 
     if (solver->conf.verbosity) {
-        cout << "c [walksat] tail starts after flip = " << tail_start_flip << endl;
+        cout << "c [WalkMvtSAT] tail starts after flip = " << tail_start_flip << endl;
     }
 }
 
-void WalkSAT::print_statistics_header()
+void WalkMvtSAT::print_statistics_header()
 {
     if (solver->conf.verbosity) {
-        cout << "c [walksat] numvars = " << numvars << ", numclauses = "
+        cout << "c [WalkMvtSAT] numvars = " << numvars << ", numclauses = "
         << numclauses << ", numliterals = " << numliterals << endl;
 
-        cout << "c [walksat]    lowbad    unsat        avg    flips    nume-" << endl;
-        cout << "c [walksat]      this      end      unsat     this    rator" << endl;
-        cout << "c [walksat]       try      try       tail      try         " << endl;
+        cout << "c [WalkMvtSAT]    lowbad    unsat        avg    flips    nume-" << endl;
+        cout << "c [WalkMvtSAT]      this      end      unsat     this    rator" << endl;
+        cout << "c [WalkMvtSAT]       try      try       tail      try         " << endl;
     }
 }
 
-void WalkSAT::update_statistics_start_try()
+void WalkMvtSAT::update_statistics_start_try()
 {
     lowbad = numfalse;
     sample_size = 0;
     sumfalse = 0.0;
 }
 
-void WalkSAT::update_statistics_end_flip()
+void WalkMvtSAT::update_statistics_end_flip()
 {
     if (adaptive) {
         /* Reference for adaptie noise option:
-         * An Adaptive Noise Mechanism for WalkSAT (Corrected). Holger H. Hoos.
+         * An Adaptive Noise Mechanism for WalkMvtSAT (Corrected). Holger H. Hoos.
          */
 
         if (numfalse < last_adaptive_objective) {
@@ -597,7 +645,7 @@ void WalkSAT::update_statistics_end_flip()
     }
 }
 
-void WalkSAT::update_and_print_statistics_end_try()
+void WalkMvtSAT::update_and_print_statistics_end_try()
 {
     totalflip += numflip;
     x += numflip;
@@ -632,7 +680,7 @@ void WalkSAT::update_and_print_statistics_end_try()
 
     if (solver->conf.verbosity) {
         cout
-        << "c [walksat] "
+        << "c [WalkMvtSAT] "
         << std::right
         << std::setw(9) << lowbad
         << std::setw(9) << numfalse
@@ -643,26 +691,26 @@ void WalkSAT::update_and_print_statistics_end_try()
     }
 
     if (numfalse == 0 && countunsat() != 0) {
-        cout << "ERROR: WalkSAT -- verification of solution fails!" << endl;
+        cout << "ERROR: WalkMvtSAT -- verification of solution fails!" << endl;
         exit(-1);
     }
 }
 
-void WalkSAT::print_statistics_final()
+void WalkMvtSAT::print_statistics_final()
 {
     totalTime = cpuTime() - startTime;
     seconds_per_flip = ratio_for_stat(totalTime, totalflip);
     if (solver->conf.verbosity) {
-        cout << "c [walksat] total elapsed seconds = " <<  totalTime << endl;
-        cout << "c [walksat] num tries: " <<  numtry  << endl;
-        cout << "c [walksat] avg flips per second = " << ratio_for_stat(totalflip, totalTime) << endl;
-        cout << "c [walksat] final success rate = " << stats_line_percent(1, numtry)  << endl;
-        cout << "c [walksat] avg length successful tries = %" << totalsuccessflip << endl;
+        cout << "c [WalkMvtSAT] total elapsed seconds = " <<  totalTime << endl;
+        cout << "c [WalkMvtSAT] num tries: " <<  numtry  << endl;
+        cout << "c [WalkMvtSAT] avg flips per second = " << ratio_for_stat(totalflip, totalTime) << endl;
+        cout << "c [WalkMvtSAT] final success rate = " << stats_line_percent(1, numtry)  << endl;
+        cout << "c [WalkMvtSAT] avg length successful tries = %" << totalsuccessflip << endl;
         if (found_solution) {
-            cout << "c [walksat] total success flip = " << totalsuccessflip << endl;
-            cout << "c [walksat] flips = " << totalflip << endl;
-            cout << "c [walksat] flips until assign = " << sum_x << endl;
-            cout << "c [walksat] restarts until assign = " << sum_r << endl;
+            cout << "c [WalkMvtSAT] total success flip = " << totalsuccessflip << endl;
+            cout << "c [WalkMvtSAT] flips = " << totalflip << endl;
+            cout << "c [WalkMvtSAT] flips until assign = " << sum_x << endl;
+            cout << "c [WalkMvtSAT] restarts until assign = " << sum_r << endl;
         }
     }
 
@@ -682,28 +730,28 @@ void WalkSAT::print_statistics_final()
         }
 
         if (solver->conf.verbosity) {
-            cout << "c [walksat] final numbad level statistics"  << endl;
-            cout << "c [walksat]     statistics over all runs:"  << endl;
-            cout << "c [walksat]       overall mean avg numbad = " << mean_avgfalse << endl;
-            cout << "c [walksat]     statistics on successful runs:"  << endl;
-            cout << "c [walksat]       successful mean avg numbad = " << suc_mean_avgfalse << endl;
-            cout << "c [walksat]     statistics on nonsuccessful runs:"  << endl;
-            cout << "c [walksat]       nonsuccessful mean avg numbad level = " << nonsuc_mean_avgfalse  << endl;
+            cout << "c [WalkMvtSAT] final numbad level statistics"  << endl;
+            cout << "c [WalkMvtSAT]     statistics over all runs:"  << endl;
+            cout << "c [WalkMvtSAT]       overall mean avg numbad = " << mean_avgfalse << endl;
+            cout << "c [WalkMvtSAT]     statistics on successful runs:"  << endl;
+            cout << "c [WalkMvtSAT]       successful mean avg numbad = " << suc_mean_avgfalse << endl;
+            cout << "c [WalkMvtSAT]     statistics on nonsuccessful runs:"  << endl;
+            cout << "c [WalkMvtSAT]       nonsuccessful mean avg numbad level = " << nonsuc_mean_avgfalse  << endl;
         }
     }
 
     if (!found_solution) {
         if (solver->conf.verbosity >=2) {
-            cout << "c [walksat] ASSIGNMENT NOT FOUND"  << endl;
+            cout << "c [WalkMvtSAT] ASSIGNMENT NOT FOUND"  << endl;
         }
     }
 
     if (found_solution || solver->conf.sls_get_phase) {
         if (solver->conf.verbosity) {
             if (solver->conf.sls_get_phase) {
-                cout << "c [walksat] saving solution as requested"  << endl;
+                cout << "c [WalkMvtSAT] saving solution as requested"  << endl;
             } else if (found_solution) {
-                cout << "c [walksat] ASSIGNMENT FOUND"  << endl;
+                cout << "c [WalkMvtSAT] ASSIGNMENT FOUND"  << endl;
             }
         }
 
@@ -717,7 +765,7 @@ void WalkSAT::print_statistics_final()
 /* Utility Functions                                   */
 /*******************************************************/
 //ONLY used for checking solution
-uint32_t WalkSAT::countunsat()
+uint32_t WalkMvtSAT::countunsat()
 {
     uint32_t unsat = 0;
     for (uint32_t i = 0; i < numclauses; i++) {
@@ -736,7 +784,7 @@ uint32_t WalkSAT::countunsat()
     return unsat;
 }
 
-void WalkSAT::check_num_occurs()
+void WalkMvtSAT::check_num_occurs()
 {
     vector<uint32_t> n_occur;
     n_occur.resize(numvars*2, 0);
@@ -774,9 +822,9 @@ void WalkSAT::check_num_occurs()
 /*                  Heuristics                                  */
 /****************************************************************/
 
-uint32_t WalkSAT::pickrnovelty()
+uint32_t WalkMvtSAT::pickrnovelty(bool onlyCores)
 {
-    uint32_t tofix = false_cls[RANDMOD(numfalse)];
+    uint32_t tofix = false_cls[RANDMOD(onlyCores && numfalseViaCore > 0 ? numfalseViaCore : numfalse)];
     uint32_t clausesize = clsize[tofix];
     if (clausesize == 1)
         return clause[tofix][0].var();

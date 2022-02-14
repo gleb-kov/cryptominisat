@@ -32,11 +32,14 @@ THE SOFTWARE.
 namespace CMSat {
 
 class Solver;
-class WalkSAT {
+class WalkMvtSAT {
 public:
     lbool main();
-    WalkSAT(Solver* _solver);
-    ~WalkSAT();
+    WalkMvtSAT(Solver* _solver);
+    ~WalkMvtSAT();
+
+private:
+    void main_iteration(bool onlyCores);
 
 private:
     Solver* solver;
@@ -87,7 +90,7 @@ private:
     /****************************************************************/
     /*                  Heuristics                                  */
     /****************************************************************/
-    uint32_t pickrnovelty();
+    uint32_t pickrnovelty(bool onlyCores);
 
     /************************************/
     /* Main data structures             */
@@ -103,6 +106,8 @@ private:
     uint32_t numclauses;   /* number of clauses */
     uint32_t numliterals; /* number of instances of literals across all clauses */
     uint32_t numfalse;   /* number of false clauses */
+    uint32_t numfalseViaCore; /* number of false clauses containing core variables */
+    static constexpr size_t CORE_VARS = 512; // MD5
 
     /* Data structures for clauses */
 
@@ -117,8 +122,8 @@ private:
 
     /* Data structures for vars: arrays of size numvars indexed by var */
 
-    lbool *assigns = NULL;         /* value of each var */
-    lbool *best_assigns = NULL;
+    vector<lbool> assigns;         /* value of each var */
+    vector<lbool> best_assigns;
     uint32_t *breakcount = NULL;   /* number of clauses that become unsat if var if flipped */
     uint32_t *makecount = NULL;    /* number of clauses that become sat if var if flipped */
 
@@ -143,9 +148,10 @@ private:
     uint32_t numerator; /* make random flip with numerator/denominator frequency */
     double walk_probability = 0.5;
     uint64_t numflip;        /* number of changes so far */
-    static constexpr uint64_t cutoff = 100000;
+    static constexpr uint64_t cutoff = 100;
     static constexpr uint32_t denominator = 100000; /* denominator used in fractions to represent probabilities */
     static constexpr uint32_t one_percent = 1000;   /* ONE_PERCENT / denominator = 0.01 */
+    static constexpr size_t mergingBlockSize = 8;
     uint32_t numtry = 0;   /* total attempts at solutions */
 
     /* Histogram of tail */
