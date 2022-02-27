@@ -32,15 +32,9 @@ lbool OnePlusOneYasaSAT::main()
         return l_Undef;
     }
 
-    // distribution must be divided by normalization, but it isnt, to so tiny float numbers work better
-    for (size_t i = 1; i <= solver->nVars() / 2; ++i) {
-        distribution[i - 1] = 1.0l / std::pow(i, beta);
-        normalization += distribution[i - 1];
-    }
     mtrand.seed(solver->mtrand.randInt());
-
-    for (size_t i = 0; i < cutoff; ++i) {
-        large_mutation();
+    large_mutation();
+    for (size_t i = 0; i < 150 * cutoff; ++i) {
         small_mutation();
     }
 
@@ -68,12 +62,12 @@ void OnePlusOneYasaSAT::large_mutation()
     for (size_t j = 0; j < solver->nVars(); j++) {
         Assigns[j] = mtrand.randInt(1) != 0;
     }
+    init_for_round();
 }
 
 void OnePlusOneYasaSAT::small_mutation()
 {
     bool updated = false;
-    init_for_round();
 
     for (uint64_t i = 0; i < lambda; ++i) {
         pickflips();
@@ -81,11 +75,13 @@ void OnePlusOneYasaSAT::small_mutation()
             updated = true;
             lowestbad = numfalse;
             Best_assigns = Assigns;
+            // std::cout << "lowst: " << lowestbad << std::endl;
         }
     }
 
     if (!updated) {
         Assigns = Best_assigns;
+        init_for_round();
     }
 }
 
@@ -156,7 +152,9 @@ void OnePlusOneYasaSAT::pickflips()
             flips++;
         }
     }
-    std::cout << "flips: " << flips << std::endl;
+    if (!flips) {
+        pickflips();
+    }
 }
 
 template<class T>
@@ -235,7 +233,6 @@ bool OnePlusOneYasaSAT::init_problem()
 
     Assigns.assign(solver->nVars(), true);
     Best_assigns.assign(solver->nVars(), true);
-    distribution.resize(solver->nVars() / 2);
 
     numliterals = 0;
 

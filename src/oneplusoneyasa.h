@@ -24,9 +24,6 @@ class OnePlusOneYasaSAT
     void small_mutation();
 
    private:
-    constexpr static long double beta = 3.0l; // 3.0 is proven best
-    long double normalization = 0;            // aka C^beta_{n/2}
-    std::vector<long double> distribution;    // aka P_lambda
     constexpr static uint64_t lambda = 1;     // (1+lambda)-EA
     static constexpr uint64_t cutoff = 100;
 
