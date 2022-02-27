@@ -44,6 +44,7 @@ private:
     lbool run_oneplusone();
     lbool run_oneplusonefea();
     lbool run_oneplusonefeaup();
+    lbool run_oneplusoneyasa();
     lbool run_genetic();
 
     #ifdef USE_YALSAT
